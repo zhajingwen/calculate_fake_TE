@@ -4,11 +4,11 @@
 
 ## 📌 项目简介
 
-本项目通过分析 SHIB 和 BTC 之间的虚假转移熵，识别由共同驱动因素引起的虚假因果关系，并生成交易信号。
+本项目通过分析 KCS 和 BTC 之间的虚假转移熵，识别由共同驱动因素引起的虚假因果关系，并生成交易信号。
 
 ## 🎯 主要功能
 
-1. **数据下载**: 从 Yahoo Finance 自动下载加密货币历史数据
+1. **数据下载**: 使用 CCXT 从 KuCoin 获取 5m、60d 的加密货币历史 K 线（`BTC/USDT`、`KCS/USDT`）
 2. **最优延迟计算**: 通过交叉相关分析找到最优延迟 τ*
 3. **虚假转移熵计算**: 使用 PyInform 库计算 T_{ALT → BTC}(τ)
 4. **信号生成**: 根据 TE 值生成交易信号
@@ -26,12 +26,12 @@ uv sync
 或者使用 pip：
 
 ```bash
-pip install matplotlib numpy pandas pyinform yfinance
+pip install matplotlib numpy pandas pyinform ccxt
 ```
 
 ## 📦 依赖项
 
-- **yfinance**: 用于从 Yahoo Finance 下载数据
+- **ccxt**: 从交易所（KuCoin）获取行情数据
 - **numpy**: 数值计算
 - **pandas**: 数据处理
 - **pyinform**: 信息论计算（转移熵）
@@ -46,7 +46,7 @@ python main.py
 ```
 
 程序流程：
-1. 下载 BTC-USD 和 SHIB-USD 的最近 60 天每小时数据
+1. 下载 BTC/USDT 和 KCS/USDT 的最近 60 天、5 分钟 K 线
 2. 计算最优延迟 τ*
 3. 计算虚假转移熵
 4. 生成交易信号
@@ -56,13 +56,13 @@ python main.py
 
 ### 核心函数
 
-#### `download_data(symbol, period="60d", interval="1h")`
-下载并处理加密货币数据
+#### `download_ccxt_data(symbol, period="60d", timeframe="5m")`
+从 KuCoin 通过 CCXT 下载并处理加密货币数据
 
 **参数:**
-- `symbol`: 加密货币交易对，如 "BTC-USD"
+- `symbol`: 加密货币交易对，如 "BTC/USDT"
 - `period`: 数据时间范围，默认 "60d"
-- `interval`: 数据间隔，默认 "1h"
+- `timeframe`: 数据间隔，默认 "5m"
 
 **返回:**
 - DataFrame，包含价格数据和收益率（USD）
@@ -73,7 +73,7 @@ python main.py
 **参数:**
 - `btc_ret`: BTC 收益率数组
 - `alt_ret`: Altcoin 收益率数组
-- `max_lag`: 最大延迟范围，默认 48 小时
+- `max_lag`: 最大延迟范围（单位：5m bars），默认 48
 
 **返回:**
 - `tau_star`: 最优延迟值
@@ -104,8 +104,8 @@ python main.py
 ## 📊 输出结果
 
 程序会生成：
-- 最优延迟 τ* 值
-- 虚假转移熵 T_{SHIB→BTC}(τ*)
+- 最优延迟 τ* 值（单位：5m bars，括号内显示分钟）
+- 虚假转移熵 T_{KCS→BTC}(τ*)
 - 交易信号
 - 可视化图表
   - 交叉相关 vs 延迟
@@ -113,7 +113,7 @@ python main.py
 
 ## ⚠️ 注意事项
 
-- **数据可靠性**: 依赖 Yahoo Finance API 的数据质量
+- **数据可靠性**: 依赖交易所（KuCoin）与 CCXT 的数据质量与限频
 - **计算复杂度**: 转移熵计算可能需要较长时间
 - **信号有效性**: 仅供参考，不构成投资建议
 
@@ -122,7 +122,7 @@ python main.py
 1. 支持更多加密货币对的分析
 2. 添加回测功能验证信号有效性
 3. 优化算法提高计算速度
-4. 增加错误处理和 Yahoo Finance API 限流处理
+4. 增加错误处理和交易所 API 限流处理
 
 ## 📚 参考资料
 
