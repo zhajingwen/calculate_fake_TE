@@ -1,0 +1,13 @@
+[project]
+name = "calculate-fake-te"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "matplotlib>=3.10.7",
+    "numpy>=2.3.4",
+    "pandas>=2.3.3",
+    "pyinform>=0.2.0",
+    "yfinance>=0.2.66",
+]
