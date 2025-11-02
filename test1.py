@@ -33,7 +33,7 @@ def download_ccxt_data(symbol: str, period: str, timeframe: str) -> pd.DataFrame
     """
     # 更长超时 + 限速；若 .com 超时，将切换到 .cc 镜像
     exchange = ccxt.kucoin({"timeout": 30000})
-    exchange.load_markets()
+    # exchange.load_markets()
 
     target_bars = _period_to_bars(period, timeframe)
     # timeframe为分钟级
@@ -92,37 +92,11 @@ def find_optimal_delay(btc_ret, alt_ret, max_lag=48):
         if m < 10:
             corrs.append(-1)
             continue
-        # print(x[:m], y[:m])
         related_matrix = np.corrcoef(x[:m], y[:m])[0, 1]
-        print(f'lag: {lag}, related_matrix: {related_matrix}')
-
-        # # 转成 DataFrame
-        # df = pd.DataFrame({'BTC': x[:m], 'KCS': y[:m]})
-        # print(df)
-        # print(df.corr())    
-        # # 画热力图
-        # plt.figure(figsize=(6, 5))
-        # sns.heatmap(
-        #     df.corr(),
-        #     annot=True,          # 显示数字
-        #     cmap='coolwarm',     # 红正蓝负
-        #     center=0,            # 0 为中心（可选）
-        #     square=True,         # 正方形格子
-        #     fmt='.2f',           # 保留2位小数
-        #     cbar_kws={'label': '相关系数'}  # 颜色条标签
-        # )
-        # plt.title('BTC vs ETH 收益率相关性热力图')
-        # plt.show()
-
-        # time.sleep(1000)
-                
-        
-        
         corrs.append(related_matrix)
-    # print(corrs)
     tau_star = lags[np.argmax(corrs)]
-    print(f'tau_star: {tau_star}')
-    return tau_star, corrs
+    max_related_matrix = max(corrs)
+    return tau_star, corrs, max_related_matrix
 
 # ================== 3. 计算虚假 TE: T_{ALT → BTC}(τ) ==================
 def compute_spurious_te(btc_ret, alt_ret, delay, k=3):
@@ -197,6 +171,17 @@ def generate_signal(te_value, threshold=0.05):
 def main():
     timeframes = ["1m","5m"]
     periods = ["1d", "7d", "30d", "60d"]
+    max_related_matrix_list = {}
+
+    exchange = ccxt.kucoin({"timeout": 30000})
+    all_coins = exchange.load_markets()
+    # print(all_coins)
+    for coin in all_coins:
+        coin_item = all_coins[coin]
+        if coin_item['quote'] != 'USDT':
+            continue
+        print(coin)
+    # 下载数据
     for timeframe in timeframes:
         for period in periods:
             print(f"正在从 KuCoin 下载 BTC/USDT 和 KCS/USDT 的 {timeframe}、{period} 数据...")
@@ -210,10 +195,31 @@ def main():
             alt_ret = alt_df['return'].values
             
             # 1. 找最优延迟（单位：分钟级 bars）
-            tau_star, corr_curve = find_optimal_delay(btc_ret, alt_ret)
-            print(f'timeframe: {timeframe}, period: {period}, tau_star: {tau_star}')
+            tau_star, corr_curve, max_related_matrix = find_optimal_delay(btc_ret, alt_ret)
+            print(f'timeframe: {timeframe}, period: {period}, tau_star: {tau_star}, max_related_matrix: {max_related_matrix}')
+
+            max_related_matrix_list[max_related_matrix] = (timeframe, period)
+            
             # return tau_star, corr_curve
 
+    max_related_matrix_list = sorted(max_related_matrix_list.items(), key=lambda x: x[0], reverse=True)
+    
+    # 转换为 pandas DataFrame
+    df_results = pd.DataFrame([
+        {
+            '最大相关系数': max_corr,
+            '时间周期': timeframe,
+            '数据周期': period
+        }
+        for max_corr, (timeframe, period) in max_related_matrix_list
+    ])
+    
+    # 格式化输出
+    print("\n" + "="*60)
+    print("相关系数分析结果")
+    print("="*60)
+    print(df_results.to_string(index=False))
+    print("="*60)
 
 # ================== 运行 ==================
 if __name__ == "__main__":
