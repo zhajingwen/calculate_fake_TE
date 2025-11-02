@@ -1,23 +1,43 @@
 # spurious_te_signal.py
 import ccxt
+import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+
+
 
 # ================== 1. 数据下载（CCXT / KuCoin） ==================
 def _period_to_bars(period: str, timeframe: str) -> int:
-    assert timeframe == "5m"
+    """
+    将周期转换为 bars
+    period: 周期，如 "60d", 天为单位
+    timeframe: 时间周期，如 "5m", 分钟为单位
+    return: bars
+    """
+    # assert timeframe == "5m"
     days = int(period.rstrip('d'))
-    bars_per_day = int(24 * 60 / 5)
+    timeframe = int(timeframe.rstrip('m'))
+    bars_per_day = int(24 * 60 / timeframe)
     return days * bars_per_day
 
-def download_ccxt_data(symbol: str, period: str = "60d", timeframe: str = "5m") -> pd.DataFrame:
+def download_ccxt_data(symbol: str, period: str, timeframe: str) -> pd.DataFrame:
+    """
+    下载数据
+    symbol: 交易对，如 "BTC/USDT"
+    period: 周期，如 "60d"
+    timeframe: 时间周期，如 "5m"
+    return: DataFrame
+    """
     # 更长超时 + 限速；若 .com 超时，将切换到 .cc 镜像
     exchange = ccxt.kucoin({"timeout": 30000})
     exchange.load_markets()
 
     target_bars = _period_to_bars(period, timeframe)
-    ms_per_bar = 5 * 60 * 1000
+    # timeframe为分钟级
+    ms_per_bar = int(timeframe.rstrip('m')) * 60 * 1000
     now_ms = exchange.milliseconds()
     since = now_ms - target_bars * ms_per_bar
 
@@ -53,23 +73,18 @@ def download_ccxt_data(symbol: str, period: str = "60d", timeframe: str = "5m") 
     df = df.set_index("Timestamp").sort_index()
     df['return'] = df['Close'].pct_change().fillna(0)
     df['volume_usd'] = df['Volume'] * df['Close']
-    print(df)
     return df
 
 # ================== 2. 找最优延迟 τ* ==================
 def find_optimal_delay(btc_ret, alt_ret, max_lag=48):
     corrs = []
-    lags = list(range(-max_lag, max_lag + 1))
+    lags = list(range(0, max_lag + 1))
     for lag in lags:
         if lag > 0:
             # ALT 滞后 BTC：验证 BTC[t] 是否影响 ALT[t+lag]
             x = btc_ret[:-lag]  # BTC 的前 n-lag 个
             y = alt_ret[lag:]   # ALT 的后 n-lag 个（跳过前 lag 个）
-        elif lag < 0:
-            # BTC 滞后 ALT：验证 ALT[t] 是否影响 BTC[t+|lag|]
-            x = alt_ret[:lag]   # ALT 的前 n-|lag| 个（去掉最后 |lag| 个）
-            y = btc_ret[-lag:]  # BTC 的后 n-|lag| 个（跳过前 |lag| 个）
-        else:
+        elif lag == 0:
             # lag == 0，用全样本
             x = alt_ret
             y = btc_ret
@@ -77,8 +92,36 @@ def find_optimal_delay(btc_ret, alt_ret, max_lag=48):
         if m < 10:
             corrs.append(-1)
             continue
-        corrs.append(np.corrcoef(x[:m], y[:m])[0, 1])
+        # print(x[:m], y[:m])
+        related_matrix = np.corrcoef(x[:m], y[:m])[0, 1]
+        print(f'lag: {lag}, related_matrix: {related_matrix}')
+
+        # # 转成 DataFrame
+        # df = pd.DataFrame({'BTC': x[:m], 'KCS': y[:m]})
+        # print(df)
+        # print(df.corr())    
+        # # 画热力图
+        # plt.figure(figsize=(6, 5))
+        # sns.heatmap(
+        #     df.corr(),
+        #     annot=True,          # 显示数字
+        #     cmap='coolwarm',     # 红正蓝负
+        #     center=0,            # 0 为中心（可选）
+        #     square=True,         # 正方形格子
+        #     fmt='.2f',           # 保留2位小数
+        #     cbar_kws={'label': '相关系数'}  # 颜色条标签
+        # )
+        # plt.title('BTC vs ETH 收益率相关性热力图')
+        # plt.show()
+
+        # time.sleep(1000)
+                
+        
+        
+        corrs.append(related_matrix)
+    # print(corrs)
     tau_star = lags[np.argmax(corrs)]
+    print(f'tau_star: {tau_star}')
     return tau_star, corrs
 
 # ================== 3. 计算虚假 TE: T_{ALT → BTC}(τ) ==================
@@ -152,58 +195,26 @@ def generate_signal(te_value, threshold=0.05):
 
 # ================== 5. 主函数：KCS vs BTC（以 USDT 计价，5m/60d） ==================
 def main():
-    print("正在从 KuCoin 下载 BTC/USDT 和 KCS/USDT 的 5m、60d 数据...")
-    btc_df = download_ccxt_data("BTC/USDT", period="60d", timeframe="5m")
-    alt_df = download_ccxt_data("KCS/USDT", period="60d", timeframe="5m")
-    
-    common_idx = btc_df.index.intersection(alt_df.index)
-    btc_df, alt_df = btc_df.loc[common_idx], alt_df.loc[common_idx]
-    
-    btc_ret = btc_df['return'].values
-    alt_ret = alt_df['return'].values
-    
-    # 1. 找最优延迟（单位：5m bars）
-    tau_star, corr_curve = find_optimal_delay(btc_ret, alt_ret)
-    print(f"最优延迟 τ* = {tau_star:+} 个 5m bars（约 {tau_star*5} 分钟）")
-    
-    # 2. 计算虚假 TE
-    te_false = compute_spurious_te(btc_ret, alt_ret, delay=tau_star)
-    print(f"虚假转移熵 T_{{KCS→BTC}}(τ*) = {te_false:.4f} bits")
-    
-    # 3. 信号
-    signal = generate_signal(te_false, threshold=0.05)
-    print(f"信号: {signal}")
-    
-    # 4. 可视化
-    plt.figure(figsize=(12, 5))
-    
-    plt.subplot(1, 2, 1)
-    lags = list(range(-48, 49))
-    plt.plot(lags, corr_curve, 'b-', linewidth=2)
-    plt.axvline(tau_star, color='r', linestyle='--', label=f'τ* = {tau_star} bars')
-    plt.title('交叉相关 vs 延迟')
-    plt.xlabel('延迟 τ (5m bars)')
-    plt.ylabel('相关系数')
-    plt.legend()
-    plt.grid(True)
-    
-    plt.subplot(1, 2, 2)
-    te_curve = [compute_spurious_te(btc_ret, alt_ret, d) for d in range(0, 25)]
-    plt.plot(range(0, 25), te_curve, 'r-', linewidth=2)
-    plt.axvline(abs(tau_star), color='r', linestyle='--', label=f'τ* = {abs(tau_star)} bars')
-    plt.axhline(0.05, color='k', linestyle=':', label='阈值 0.05')
-    plt.title('虚假 TE vs 正延迟')
-    plt.xlabel('延迟 τ (5m bars)')
-    plt.ylabel('T_{KCS→BTC} (bits)')
-    plt.legend()
-    plt.grid(True)
-    
-    plt.tight_layout()
-    plt.savefig("spurious_te_kcs_btc.png", dpi=300)
-    plt.show()
-    
-    return te_false, tau_star
+    timeframes = ["1m","5m"]
+    periods = ["1d", "7d", "30d", "60d"]
+    for timeframe in timeframes:
+        for period in periods:
+            print(f"正在从 KuCoin 下载 BTC/USDT 和 KCS/USDT 的 {timeframe}、{period} 数据...")
+            btc_df = download_ccxt_data("BTC/USDT", period=period, timeframe=timeframe)
+            alt_df = download_ccxt_data("KCS/USDT", period=period, timeframe=timeframe)
+            
+            common_idx = btc_df.index.intersection(alt_df.index)
+            btc_df, alt_df = btc_df.loc[common_idx], alt_df.loc[common_idx]
+            
+            btc_ret = btc_df['return'].values
+            alt_ret = alt_df['return'].values
+            
+            # 1. 找最优延迟（单位：分钟级 bars）
+            tau_star, corr_curve = find_optimal_delay(btc_ret, alt_ret)
+            print(f'timeframe: {timeframe}, period: {period}, tau_star: {tau_star}')
+            # return tau_star, corr_curve
+
 
 # ================== 运行 ==================
 if __name__ == "__main__":
-    te, tau = main()
+    main()
