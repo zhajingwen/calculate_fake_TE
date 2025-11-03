@@ -10,8 +10,7 @@ from retry import retry
 
 class SpuriousTEAnalyzer:
     """
-    虚假转移熵分析器类
-    用于分析加密货币之间的虚假转移熵和延迟相关性
+    分析各个山寨币与BTC的皮尔逊相关系数
     """
     
     def __init__(self, exchange_name="kucoin", timeout=30000, default_timeframes=None, default_periods=None):
@@ -27,16 +26,18 @@ class SpuriousTEAnalyzer:
         self.exchange = getattr(ccxt, exchange_name)({"timeout": timeout})
         self.timeframes = default_timeframes or ["1m", "5m"]
         self.periods = default_periods or ["1d", "7d", "30d", "60d"]
+        # BTC的交易对名称
         self.btc_symbol = "BTC/USDT"
+        # 缓存BTC各个颗粒度，各个周期级别的数据
         self.btc_df_cache = {}  # 缓存字典，key为 (timeframe, period)
     
     @staticmethod
     def _period_to_bars(period: str, timeframe: str) -> int:
         """
         将周期转换为 bars
-        period: 周期，如 "60d", 天为单位
-        timeframe: 时间周期，如 "5m", 分钟为单位
-        return: bars
+        period: 周期（K线的覆盖范围），如 "60d", 天为单位
+        timeframe: 时间周期（K线的颗粒度），如 "5m", 分钟为单位
+        return: bars（统计周期内K线总条数）
         """
         days = int(period.rstrip('d'))
         timeframe_minutes = int(timeframe.rstrip('m'))
