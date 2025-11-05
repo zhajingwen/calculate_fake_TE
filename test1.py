@@ -83,7 +83,8 @@ class SpuriousTEAnalyzer:
                 break
 
         if not all_rows:
-            return pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
+            # 返回包含所有必要列的空 DataFrame
+            return pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume", "return", "volume_usd"])
 
         df = pd.DataFrame(all_rows, columns=["Timestamp", "Open", "High", "Low", "Close", "Volume"])
         df["Timestamp"] = pd.to_datetime(df["Timestamp"], unit="ms", utc=True).dt.tz_convert(None)
@@ -241,6 +242,14 @@ class SpuriousTEAnalyzer:
                 
                 common_idx = btc_df.index.intersection(alt_df.index)
                 btc_df, alt_df = btc_df.loc[common_idx], alt_df.loc[common_idx]
+                
+                # 检查数据是否为空或缺少必要的列
+                if len(btc_df) == 0 or len(alt_df) == 0:
+                    print(f"  警告: {coin} 的 {timeframe}/{period} 数据为空，跳过...")
+                    continue
+                if 'return' not in btc_df.columns or 'return' not in alt_df.columns:
+                    print(f"  警告: {coin} 的 {timeframe}/{period} 数据缺少 'return' 列，跳过...")
+                    continue
                 
                 btc_ret = btc_df['return'].values
                 alt_ret = alt_df['return'].values
