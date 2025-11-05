@@ -279,6 +279,7 @@ class SpuriousTEAnalyzer:
             first_max_corr = df_results.iloc[0]['最大相关系数']
             last_max_corr = df_results.iloc[-1]['最大相关系数']
             # 异常数据：第一行最大相关系数大于0.4，最后一行最大相关系数小于0.05
+            # 这个数据状态表示1分钟级别的K线存在很大的滞后性，但是长期又表现出跟随的特性，那这种就存在锚定BTC价格走势的时间差套利空间
             if first_max_corr > 0.4 and last_max_corr < 0.05:
                 print_status = True
             # 异常数据：第一行最大相关系数小于0.11，最后一行最大相关系数小于0.05
