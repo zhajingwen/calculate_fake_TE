@@ -228,7 +228,7 @@ class SpuriousTEAnalyzer:
         # 下载数据
         for timeframe in self.timeframes:
             for period in self.periods:
-                print(f"正在从 KuCoin 下载 BTC/USDT 和 {coin} 的 {timeframe}、{period} 数据...")
+                print(f"正在从 KuCoin 下载 {coin} 的 {timeframe}、{period} 数据...")
                 # 缓存 BTC 数据，避免重复下载（因为 BTC 数据对所有币种都相同）
                 cache_key = (timeframe, period)
                 if cache_key not in self.btc_df_cache:
