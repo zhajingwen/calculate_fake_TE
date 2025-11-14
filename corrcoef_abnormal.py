@@ -2,11 +2,20 @@
 from enum import Flag
 import ccxt
 import time
+import logging
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from retry import retry
+
+# 配置 logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 
 class SpuriousTEAnalyzer:
@@ -230,7 +239,7 @@ class SpuriousTEAnalyzer:
         # 下载数据
         for timeframe in self.timeframes:
             for period in self.periods:
-                print(f"正在下载 {coin} 的 {timeframe}、{period} 数据...")
+                logger.info(f"正在下载 {coin} 的 {timeframe}、{period} 数据...")
                 # 缓存 BTC 数据，避免重复下载（因为 BTC 数据对所有币种都相同）
                 cache_key = (timeframe, period)
                 if cache_key not in self.btc_df_cache:
@@ -246,10 +255,10 @@ class SpuriousTEAnalyzer:
                 
                 # 检查数据是否为空或缺少必要的列
                 if len(btc_df) == 0 or len(alt_df) == 0:
-                    print(f"  警告: {coin} 的 {timeframe}/{period} 数据为空，跳过...")
+                    logger.warning(f"  警告: {coin} 的 {timeframe}/{period} 数据为空，跳过...")
                     continue
                 if 'return' not in btc_df.columns or 'return' not in alt_df.columns:
-                    print(f"  警告: {coin} 的 {timeframe}/{period} 数据缺少 'return' 列，跳过...")
+                    logger.warning(f"  警告: {coin} 的 {timeframe}/{period} 数据缺少 'return' 列，跳过...")
                     continue
                 
                 btc_ret = btc_df['return'].values
@@ -257,7 +266,7 @@ class SpuriousTEAnalyzer:
                 
                 # 1. 找最优延迟（单位：分钟级 bars）
                 tau_star, corr_curve, max_related_matrix = self.find_optimal_delay(btc_ret, alt_ret)
-                print(f'timeframe: {timeframe}, period: {period}, tau_star: {tau_star}, max_related_matrix: {max_related_matrix}')
+                logger.info(f'timeframe: {timeframe}, period: {period}, tau_star: {tau_star}, max_related_matrix: {max_related_matrix}')
 
                 max_related_matrix_list[max_related_matrix] = (timeframe, period, tau_star)
 
@@ -286,14 +295,14 @@ class SpuriousTEAnalyzer:
             elif first_max_corr < 0.11 and last_max_corr < 0.05:
                 print_status = True
             else:
-                print(f'常规数据：{coin}')
+                logger.info(f'常规数据：{coin}')
         if print_status:
             # 格式化输出
-            print("\n" + "="*60)
-            print(f"{coin}相关系数分析结果")
-            print("="*60)
-            print(df_results.to_string(index=False))
-            print("="*60)
+            logger.info("\n" + "="*60)
+            logger.info(f"{coin}相关系数分析结果")
+            logger.info("="*60)
+            logger.info(df_results.to_string(index=False))
+            logger.info("="*60)
     
     def run(self, quote_currency="USDT"):
         """
